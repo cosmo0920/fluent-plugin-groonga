@@ -29,11 +29,15 @@ module Fluent
   class GroongaInput < Input
     Plugin.register_input("groonga", self)
 
+    helpers :server
+
     def initialize
       super
     end
 
     config_param :protocol, :enum, :list => [:http, :gqtp], :default => :http
+    config_param :bind, :string, :default => "0.0.0.0"
+    config_param :port, :integer, :default => nil
 
     def configure(conf)
       super
@@ -48,12 +52,20 @@ module Fluent
 
     def start
       super
-      @input.start
+      shared_socket = system_config.workers > 1
+      log.info "listening port", port: @port, bind: @bind
+
+      socket = server_create_tcp_socket(shared_socket, @bind, @port)
+      @input.start(socket)
     end
 
     def shutdown
       @input.shutdown
       super
+    end
+
+    def multi_workers_ready?
+      true
     end
 
     class Repeater < Coolio::TCPSocket
@@ -74,8 +86,6 @@ module Fluent
     class BaseInput
       include Configurable
 
-      config_param :bind, :string, :default => "0.0.0.0"
-      config_param :port, :integer, :default => nil
       config_param :real_host, :string
       config_param :real_port, :integer, :default => nil
       DEFAULT_EMIT_COMMANDS = [
@@ -129,8 +139,7 @@ module Fluent
         @real_port ||= default_port
       end
 
-      def start
-        listen_socket = TCPServer.new(@bind, @port)
+      def start(listen_socket)
           @loop = Coolio::Loop.new
 
           @socket = Coolio::TCPServer.new(listen_socket, nil,
