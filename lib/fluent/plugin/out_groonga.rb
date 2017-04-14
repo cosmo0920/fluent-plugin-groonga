@@ -119,6 +119,10 @@ module Fluent
       @emitter.emit(chunk)
     end
 
+    def multi_workers_ready?
+      true
+    end
+
     private
     def create_client(protocol)
       case protocol
